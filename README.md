@@ -25,3 +25,28 @@ pip install cupy-cuda13x
 
 # 例: CUDA 12.x がインストールされている場合
 # pip install cupy-cuda12x
+
+## 🚀 使用方法
+
+基本的なコマンドの構文は以下の通りです。
+
+```bash
+python gpu_benchmark.py -b <バックエンド> [オプション]
+```
+
+### 実行例
+
+**CUDAを使用して、サイズ8192の行列で10回テストを実行する:**
+```bash
+python gpu_benchmark.py -b cuda -n 8192 -i 10
+```
+
+**OpenCLを使用してテストを実行し、結果をCSVファイルに保存する:**
+```bash
+python gpu_benchmark.py -b opencl -n 8192 -i 10 -o my_benchmark_results.csv
+```
+
+**HPC向けの厳しいテスト（倍精度浮動小数点数 FP64 を使用）:**
+```bash
+python gpu_benchmark.py -b cuda -n 10240 -d float64 -o my_benchmark_results.csv
+```
