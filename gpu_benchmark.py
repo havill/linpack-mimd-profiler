@@ -3,7 +3,7 @@ import argparse
 import time
 import csv
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 import numpy as np
 import os
 import sys
@@ -313,13 +313,24 @@ def main():
     print(f"Iterations           : {args.iterations}")
     print("--------------------------------------------------")
 
+    # Capture Local time for console & UTC ISO8601 for CSV
+    start_time_local = datetime.now().astimezone()
+    start_time_local_str = f"{start_time_local.strftime('%Y-%m-%d %H:%M:%S')} {start_time_local.tzname()}"
+    start_time_utc_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
     # Route to appropriate backend
     if args.backend == "cuda":
         res = run_cuda(args.size, args.iterations, args.dtype)
     else:
         res = run_opencl(args.size, args.iterations, args.dtype)
 
+    # Capture End Time (Local for console)
+    end_time_local = datetime.now().astimezone()
+    end_time_local_str = f"{end_time_local.strftime('%Y-%m-%d %H:%M:%S')} {end_time_local.tzname()}"
+
     print("--------------------------------------------------")
+    print(f"Start Time           : {start_time_local_str}")
+    print(f"End Time             : {end_time_local_str}")
     print(f"Device               : {res['device_name']}")
     print(f"Actual Matrix Size   : {res['actual_n']}")
     print(f"Est. VRAM Usage      : {res['memory_mb']:.2f} MB")
@@ -327,10 +338,6 @@ def main():
     print(f"Best Time            : {res['best_time']:.6f} s")
     print(f"Avg Performance      : {res['avg_tflops']:.4f} TFLOPS")
     print(f"Peak Performance     : {res['peak_tflops']:.4f} TFLOPS")
-    print(f"Average Power        : {res['avg_power_w']} W")
-    print(f"Peak Power           : {res['peak_power_w']} W")
-    print(f"Efficiency           : {res['efficiency_gflops_w']} GFLOPS/W")
-
     print("==================================================")
 
     if args.output:
@@ -338,7 +345,7 @@ def main():
         try:
             with open(args.output, mode='a', newline='') as csvfile:
                 fieldnames = [
-                    "Backend", "Size", "Iterations", "Dtype", 
+                    "Start_Time_UTC", "Backend", "Size", "Iterations", "Dtype", 
                     "Latency_ms", "TFLOPS", "Avg_Power_W", "Peak_Power_W", "Efficiency_GFLOPS_W"
                 ]
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -347,11 +354,12 @@ def main():
                     writer.writeheader()
 
                 writer.writerow({
+                    'Start_Time_UTC': start_time_utc_iso,
                     'Backend': args.backend.upper(),
                     'Size': res['actual_n'],
                     'Iterations': args.iterations,
                     'Dtype': args.dtype,
-                    'Latency_ms': round(res['avg_time'] * 1000, 2), # Converted from seconds to ms
+                    'Latency_ms': round(res['avg_time'] * 1000, 2), # Converted to ms for consistency
                     'TFLOPS': round(res['avg_tflops'], 4),
                     'Avg_Power_W': res['avg_power_w'],
                     'Peak_Power_W': res['peak_power_w'],
