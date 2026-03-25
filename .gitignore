@@ -1,3 +1,11 @@
+# Ignore CSV files made by the tool
+*.csv
+# Ignore image files made by the generate_charts.py
+*.png
+*.svg
+*.pdf
+*.html
+
 !Build/
 .last_cover_stats
 /META.yml
