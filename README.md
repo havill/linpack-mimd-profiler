@@ -60,3 +60,14 @@ python gpu_benchmark.py -b cuda -n 10240 -d float64 -o my_benchmark_results.csv
 | `--iterations` | `-i` | `10` | ベンチマークを実行する反復回数です。 |
 | `--dtype` | `-d` | `float32` | データの精度を指定します。`float32`（単精度）または `float64`（倍精度）を選択できます。 |
 | `--output` | `-o` | `None` | 結果を追記するCSVファイルのパス。指定しない場合、CSV出力は行われずコンソールへの表示のみとなります。 |
+
+## 🛠️ トラブルシューティング
+
+**1. `ImportError: DLL load failed while importing cublas` (Windows)**
+Windows環境のPython 3.8以降では、セキュリティ上の理由からシステムの `Path` 変数が無視されることがあります。このエラーが出た場合は、CUDA Toolkitがインストールされていることを確認し、スクリプトの先頭にある `hardcoded_bin_path` のパスをご自身の環境（例: `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.1\bin`）に合わせて書き換えてください。
+
+**2. `cudaErrorInsufficientDriver`**
+インストールされているCUDA Toolkitのバージョンに対して、NVIDIAのディスプレイドライバが古すぎます。GeForce ExperienceやNVIDIAのウェブサイトから最新のドライバをインストールしてPCを再起動してください。
+
+**3. OpenCL実行時の `CompilerWarning: Non-empty compiler output encountered`**
+PyOpenCLはカーネルを動的にコンパイルします。NVIDIAのコンパイラが最適化のメモや「成功」のログを出力しただけでこの警告が表示されることがありますが、ベンチマーク自体が動作しTFLOPSが出力されていれば**完全に無視して問題ありません**。
