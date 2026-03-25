@@ -7,6 +7,8 @@ from datetime import datetime
 import numpy as np
 import os
 import sys
+import threading
+import time
 
 # Windows Python 3.8+ strict DLL loading fix
 if os.name == 'nt':
@@ -21,6 +23,48 @@ if os.name == 'nt':
                 pass
     else:
         print("WARNING: CUDA_PATH environment variable not found. Is the CUDA Toolkit installed?")
+
+try:
+    import pynvml
+    HAS_NVML = True
+except ImportError:
+    HAS_NVML = False
+
+class PowerMonitor(threading.Thread):
+    """Background thread to poll the GPU power sensor via NVML."""
+    def __init__(self, device_index=0):
+        super().__init__()
+        self.keep_running = True
+        self.readings = []
+        self.valid = False
+        if HAS_NVML:
+            try:
+                pynvml.nvmlInit()
+                self.handle = pynvml.nvmlDeviceGetHandleByIndex(device_index)
+                self.valid = True
+            except Exception:
+                pass # Fails silently if no NVIDIA GPU is found
+        
+    def run(self):
+        if not self.valid: return
+        while self.keep_running:
+            try:
+                power_mw = pynvml.nvmlDeviceGetPowerUsage(self.handle)
+                self.readings.append(power_mw / 1000.0) # Convert to Watts
+            except Exception:
+                pass
+            time.sleep(0.01) # Sample every 10ms
+            
+    def stop(self):
+        self.keep_running = False
+        if self.valid:
+            try: pynvml.nvmlShutdown() 
+            except: pass
+        if not self.readings: 
+            return 0.0, 0.0
+        avg_power = sum(self.readings) / len(self.readings)
+        peak_power = max(self.readings)
+        return avg_power, peak_power
 
 # ==============================================================================
 # CUDA BACKEND
@@ -63,6 +107,9 @@ def run_cuda(n, iterations, dtype):
     flops_per_run = (2.0 / 3.0) * (n ** 3) + 2.0 * (n ** 2)
     times = []
 
+    monitor = PowerMonitor()
+    monitor.start()
+
     print("Running CUDA iterations...")
     for _ in range(iterations):
         # Slightly alter 'b' to prevent caching (CPU to GPU transfer)
@@ -80,7 +127,17 @@ def run_cuda(n, iterations, dtype):
         
         times.append(end_time - start_time)
 
-    return process_results(n, memory_mb, times, flops_per_run, device_name)
+    avg_power, peak_power = monitor.stop()
+
+    return process_results(
+        n=n,
+        memory_mb=memory_mb,
+        times=times,
+        flops_per_run=flops_per_run,
+        device_name=device_name,
+        avg_power=avg_power,
+        peak_power=peak_power
+    )
 
 # ==============================================================================
 # OPENCL BACKEND
@@ -181,6 +238,9 @@ def run_opencl(n, iterations, dtype):
     flops_per_run = 2.0 * (n ** 3)
     times = []
 
+    monitor = PowerMonitor()
+    monitor.start()
+ 
     print("Running OpenCL iterations...")
     for _ in range(iterations):
         start_time = time.perf_counter()
@@ -189,16 +249,32 @@ def run_opencl(n, iterations, dtype):
         end_time = time.perf_counter()
         times.append(end_time - start_time)
 
-    return process_results(n, memory_mb, times, flops_per_run, device_name)
+    avg_power, peak_power = monitor.stop()
+
+    return process_results(
+        n=n,
+        memory_mb=memory_mb,
+        times=times,
+        flops_per_run=flops_per_run,
+        device_name=device_name,
+        avg_power=avg_power,
+        peak_power=peak_power
+    )
 
 # ==============================================================================
-# HELPER & MAIN
-# ==============================================================================
-def process_results(n, memory_mb, times, flops_per_run, device_name):
+
+def process_results(n, memory_mb, times, flops_per_run, device_name, avg_power=0.0, peak_power=0.0):
     avg_time = sum(times) / len(times)
     best_time = min(times)
+    
+    # Calculate TFLOPS
     avg_tflops = (flops_per_run / avg_time) / 1e12
     peak_tflops = (flops_per_run / best_time) / 1e12
+    
+    # Calculate Energy Efficiency (GFLOPS per Watt)
+    gflops_per_watt = 0.0
+    if avg_tflops > 0 and avg_power > 0:
+        gflops_per_watt = (avg_tflops * 1000) / avg_power
     
     return {
         'actual_n': n,
@@ -207,7 +283,11 @@ def process_results(n, memory_mb, times, flops_per_run, device_name):
         'avg_time': avg_time,
         'best_time': best_time,
         'avg_tflops': avg_tflops,
-        'peak_tflops': peak_tflops
+        'peak_tflops': peak_tflops,
+        
+        'avg_power_w': round(avg_power, 2) if avg_power > 0 else "N/A",
+        'peak_power_w': round(peak_power, 2) if peak_power > 0 else "N/A",
+        'efficiency_gflops_w': round(gflops_per_watt, 2) if gflops_per_watt > 0 else "N/A"
     }
 
 def main():
@@ -247,32 +327,35 @@ def main():
     print(f"Best Time            : {res['best_time']:.6f} s")
     print(f"Avg Performance      : {res['avg_tflops']:.4f} TFLOPS")
     print(f"Peak Performance     : {res['peak_tflops']:.4f} TFLOPS")
+    print(f"Average Power        : {res['avg_power_w']} W")
+    print(f"Peak Power           : {res['peak_power_w']} W")
+    print(f"Efficiency           : {res['efficiency_gflops_w']} GFLOPS/W")
+
     print("==================================================")
 
     if args.output:
         file_exists = os.path.isfile(args.output)
         try:
             with open(args.output, mode='a', newline='') as csvfile:
-                fieldnames = ['timestamp', 'backend', 'device_name', 'matrix_size', 'dtype', 
-                              'iterations', 'est_vram_mb', 'avg_time_s', 'best_time_s', 
-                              'avg_tflops', 'peak_tflops']
+                fieldnames = [
+                    "Backend", "Size", "Iterations", "Dtype", 
+                    "Latency_ms", "TFLOPS", "Avg_Power_W", "Peak_Power_W", "Efficiency_GFLOPS_W"
+                ]
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
                 if not file_exists:
                     writer.writeheader()
 
                 writer.writerow({
-                    'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    'backend': args.backend,
-                    'device_name': res['device_name'],
-                    'matrix_size': res['actual_n'],
-                    'dtype': args.dtype,
-                    'iterations': args.iterations,
-                    'est_vram_mb': round(res['memory_mb'], 2),
-                    'avg_time_s': round(res['avg_time'], 6),
-                    'best_time_s': round(res['best_time'], 6),
-                    'avg_tflops': round(res['avg_tflops'], 4),
-                    'peak_tflops': round(res['peak_tflops'], 4)
+                    'Backend': args.backend.upper(),
+                    'Size': res['actual_n'],
+                    'Iterations': args.iterations,
+                    'Dtype': args.dtype,
+                    'Latency_ms': round(res['avg_time'] * 1000, 2), # Converted from seconds to ms
+                    'TFLOPS': round(res['avg_tflops'], 4),
+                    'Avg_Power_W': res['avg_power_w'],
+                    'Peak_Power_W': res['peak_power_w'],
+                    'Efficiency_GFLOPS_W': res['efficiency_gflops_w']
                 })
             print(f">>> Successfully appended results to {args.output}")
         except Exception as e:

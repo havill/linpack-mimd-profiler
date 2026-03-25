@@ -1,0 +1,4 @@
+Backend,Size,Iterations,Dtype,Latency_ms,TFLOPS,Avg_Power_W,Peak_Power_W,Efficiency_GFLOPS_W
+CUDA,8192,10,float32,106.56,3.4405,75.34,109.22,45.67
+CUDA,8192,10,float32,107.12,3.4226,73.24,105.54,46.73
+OPENCL,8192,10,float32,2838.45,0.3874,128.45,129.36,3.02
