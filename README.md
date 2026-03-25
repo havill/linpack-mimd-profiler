@@ -41,6 +41,7 @@ pip install cupy-cuda13x
 
 # 例: CUDA 12.x がインストールされている場合
 # pip install cupy-cuda12x
+```
 
 ## 🚀 使用方法
 

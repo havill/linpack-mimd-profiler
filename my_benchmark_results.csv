@@ -1,0 +1,3 @@
+timestamp,backend,device_name,matrix_size,dtype,iterations,est_vram_mb,avg_time_s,best_time_s,avg_tflops,peak_tflops
+2026-03-25 17:55:36,opencl,NVIDIA GeForce RTX 3060,8192,float32,10,768.0,2.814553,2.802056,0.3907,0.3924
+2026-03-25 17:56:55,cuda,CUDA GPU (Device 0),10240,float64,10,800.16,4.049962,4.033603,0.1768,0.1775
