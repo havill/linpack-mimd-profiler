@@ -50,3 +50,13 @@ python gpu_benchmark.py -b opencl -n 8192 -i 10 -o my_benchmark_results.csv
 ```bash
 python gpu_benchmark.py -b cuda -n 10240 -d float64 -o my_benchmark_results.csv
 ```
+
+## 🎛️ コマンドラインオプション
+
+| オプション | 省略形 | デフォルト値 | 説明 |
+| :--- | :---: | :--- | :--- |
+| `--backend` | `-b` | **必須** | 実行するバックエンドを指定します。`cuda` または `opencl` のいずれかを選択してください。 |
+| `--size` | `-n` | `8192` | 生成する正方行列のサイズ $N$ （$N \times N$ の行列になります）。OpenCLの場合は自動的に16の倍数に丸められます。 |
+| `--iterations` | `-i` | `10` | ベンチマークを実行する反復回数です。 |
+| `--dtype` | `-d` | `float32` | データの精度を指定します。`float32`（単精度）または `float64`（倍精度）を選択できます。 |
+| `--output` | `-o` | `None` | 結果を追記するCSVファイルのパス。指定しない場合、CSV出力は行われずコンソールへの表示のみとなります。 |
