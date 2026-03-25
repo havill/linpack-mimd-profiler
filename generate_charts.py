@@ -21,30 +21,60 @@ def generate_charts(csv_file="benchmark_results.csv", filter_backend=None, filte
     print(f"--- 📊 Generating Charts from {csv_file} ---")
     
     if not os.path.exists(csv_file):
-        print(f"❌ Error: Could not find {csv_file}.")
+        print(f"❌ Error: Could not find '{csv_file}'.")
         print("Please run the benchmark first to generate the CSV, or specify the correct path with -f.")
         return
 
-    # 1. Load the data
-    df = pd.read_csv(csv_file)
+    # ==========================================
+    # 1. ROBUST DATA LOADING & VALIDATION
+    # ==========================================
+    try:
+        df = pd.read_csv(csv_file)
+    except pd.errors.EmptyDataError:
+        print("❌ Error: The CSV file is completely empty.")
+        return
+    except pd.errors.ParserError:
+        print("❌ Error: The CSV file is malformed and could not be parsed. Check for broken lines.")
+        return
+    except Exception as e:
+        print(f"❌ Error: Failed to read the CSV file. ({e})")
+        return
 
-    # 2. Clean and convert data types (Handle "N/A" strings gracefully)
+    # Core columns required to run at all
+    required_cols = ['Backend', 'Size', 'Dtype', 'Latency_ms', 'TFLOPS']
+    missing_cols = [col for col in required_cols if col not in df.columns]
+    
+    if missing_cols:
+        print(f"❌ Error: The CSV is missing required columns: {missing_cols}")
+        print("This file does not appear to be a valid GPU Benchmark result file.")
+        return
+
+    # Optional columns (Power metrics) - Inject as 0 if missing (e.g., from older benchmark runs)
+    optional_cols = ['Avg_Power_W', 'Peak_Power_W', 'Efficiency_GFLOPS_W']
+    for col in optional_cols:
+        if col not in df.columns:
+            df[col] = 0.0
+
+    # ==========================================
+    # 2. DATA CLEANING & TYPE CONVERSION
+    # ==========================================
     numeric_cols = ['Latency_ms', 'TFLOPS', 'Avg_Power_W', 'Peak_Power_W', 'Efficiency_GFLOPS_W']
     for col in numeric_cols:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
     # Convert Size to string for better categorical plotting on X-axis
     df['Size'] = df['Size'].astype(str)
 
-    # 3. Apply Filters
+    # ==========================================
+    # 3. APPLY FILTERS
+    # ==========================================
     if filter_backend:
         df = df[df['Backend'].str.lower() == filter_backend.lower()]
     if filter_dtype:
         df = df[df['Dtype'].str.lower() == filter_dtype.lower()]
 
     if df.empty:
-        print("❌ Error: No data left to plot after applying filters.")
+        print("❌ Error: No data left to plot after applying filters. Check your -b or -d arguments.")
         return
 
     # Set the visual style
@@ -100,7 +130,7 @@ def generate_charts(csv_file="benchmark_results.csv", filter_backend=None, filte
             plt.savefig(out_file, dpi=300)
             print(f"   ✅ Saved: {out_file}")
     else:
-        print("   ⚠️ Skipped Energy chart (No valid power/efficiency data found).")
+        print("   ⚠️ Skipped Energy chart (No valid power/efficiency data found in CSV).")
     plt.close('all')
 
     # ==========================================
@@ -151,7 +181,7 @@ def generate_charts(csv_file="benchmark_results.csv", filter_backend=None, filte
             chart4.savefig(out_file, dpi=300, bbox_inches="tight")
             print(f"   ✅ Saved: {out_file}")
     else:
-        print("   ⚠️ Skipped Power chart (No valid power data found).")
+        print("   ⚠️ Skipped Power chart (No valid power data found in CSV).")
     plt.close('all')
 
     # ==========================================
