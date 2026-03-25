@@ -47,18 +47,6 @@ source ~/.bashrc
 #### 🐍 Ubuntu 24.04等でのPython環境構築（PEP 668対策）
 最新のLinuxディストリビューションではシステムの保護により、グローバルな `pip install` が制限されています。仮想環境（venv）を作成して実行してください。
 
-#### 🎩 Fedora Remix for WSL (Whitewater Foundry) の場合
-Fedora Remixでは、軽量化のためにC/C++コンパイラなどの開発ツールが初期状態では省かれています。Python 3の本体はOSの動作のために内蔵されていますが、`pyopencl` などのビルドに必要な `gcc` や `pip` は `dnf` コマンドで手動で追加する必要があります。
-
-```bash
-# 開発ツール群（gcc, makeなど）のインストール
-sudo dnf groupinstall "Development Tools" -y
-# （最小限のコンパイラのみが必要な場合は `sudo dnf install gcc -y`）
-
-# Pythonのパッケージマネージャー(pip)と開発用ヘッダーのインストール
-sudo dnf install python3-pip python3-devel -y
-```
-
 ```bash
 # 必要なツールのインストール
 sudo apt install python3 python3-pip python3-venv python3-dev -y
@@ -69,6 +57,18 @@ source bench_env/bin/activate
 
 # 依存関係のインストール (仮想環境内)
 pip install numpy pyopencl cupy-cuda13x
+```
+
+#### 🎩 Fedora Remix for WSL (Whitewater Foundry) の場合
+Fedora Remixでは、軽量化のためにC/C++コンパイラなどの開発ツールが初期状態では省かれています。Python 3の本体はOSの動作のために内蔵されていますが、`pyopencl` などのビルドに必要な `gcc` や `pip` は `dnf` コマンドで手動で追加する必要があります。
+
+```bash
+# 開発ツール群（gcc, makeなど）のインストール
+sudo dnf groupinstall "Development Tools" -y
+# （最小限のコンパイラのみが必要な場合は `sudo dnf install gcc -y`）
+
+# Pythonのパッケージマネージャー(pip)と開発用ヘッダーのインストール
+sudo dnf install python3-pip python3-devel -y
 ```
 
 ### 2. Pythonライブラリのインストール
