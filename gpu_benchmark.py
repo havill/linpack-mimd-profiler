@@ -112,7 +112,15 @@ def run_opencl(n, iterations, dtype):
     
     if not device:
         print("WARNING: No OpenCL GPU found. Falling back to default.")
-        device = platforms[0].get_devices()[0]
+        device = None
+        for platform in platforms:
+            devices = platform.get_devices()
+            if devices:
+                device = devices[0]
+                break
+
+        if device is None:
+            raise RuntimeError("No OpenCL devices found on any platform!")
         
     ctx = cl.Context([device])
     queue = cl.CommandQueue(ctx)
