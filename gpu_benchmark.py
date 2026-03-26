@@ -345,7 +345,7 @@ def main():
         try:
             with open(args.output, mode='a', newline='') as csvfile:
                 fieldnames = [
-                    "Start_Time_UTC", "Backend", "Size", "Iterations", "Dtype", 
+                    "Start_Time_UTC", "GPU_Model", "Backend", "Size", "Iterations", "Dtype", 
                     "Latency_ms", "TFLOPS", "Avg_Power_W", "Peak_Power_W", "Efficiency_GFLOPS_W"
                 ]
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -355,11 +355,12 @@ def main():
 
                 writer.writerow({
                     'Start_Time_UTC': start_time_utc_iso,
+                    'GPU_Model': res['device_name'],
                     'Backend': args.backend.upper(),
                     'Size': res['actual_n'],
                     'Iterations': args.iterations,
                     'Dtype': args.dtype,
-                    'Latency_ms': round(res['avg_time'] * 1000, 2), # Converted to ms for consistency
+                    'Latency_ms': round(res['avg_time'] * 1000, 2),
                     'TFLOPS': round(res['avg_tflops'], 4),
                     'Avg_Power_W': res['avg_power_w'],
                     'Peak_Power_W': res['peak_power_w'],
