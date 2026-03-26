@@ -25,34 +25,64 @@ def generate_charts(csv_file="benchmark_results.csv", filter_backend=None, filte
         return
 
     # ==========================================
-    # 1. ROBUST DATA LOADING & VALIDATION
+    # BACKWARDS COMPATIBLE DATA LOADING & VALIDATION
     # ==========================================
+    parsed_data = []
     try:
-        df = pd.read_csv(csv_file)
+        import csv
+        with open(csv_file, 'r', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            for row in reader:
+                if not row: 
+                    continue # Skip empty lines
+                
+                # Skip header rows (even if they accidentally got injected mid-file)
+                if str(row[0]).strip().lower() in ['backend', 'start_time_utc', 'gpu_model']:
+                    continue
+                
+                # Dynamically map the data based on how many columns exist in this specific row!
+                num_cols = len(row)
+                if num_cols == 9:
+                    # Oldest format (9 cols): Backend, Size, Iterations, Dtype, Latency, TFLOPS, Avg Pwr, Peak Pwr, Eff
+                    parsed_data.append({
+                        'Start_Time_UTC': 'Unknown',
+                        'GPU_Model': 'Unknown GPU',
+                        'Backend': row[0], 'Size': row[1], 'Iterations': row[2], 'Dtype': row[3],
+                        'Latency_ms': row[4], 'TFLOPS': row[5], 'Avg_Power_W': row[6], 
+                        'Peak_Power_W': row[7], 'Efficiency_GFLOPS_W': row[8]
+                    })
+                elif num_cols == 10:
+                    # Mid format (10 cols): Start_Time_UTC, Backend, Size...
+                    parsed_data.append({
+                        'Start_Time_UTC': row[0],
+                        'GPU_Model': 'Unknown GPU',
+                        'Backend': row[1], 'Size': row[2], 'Iterations': row[3], 'Dtype': row[4],
+                        'Latency_ms': row[5], 'TFLOPS': row[6], 'Avg_Power_W': row[7], 
+                        'Peak_Power_W': row[8], 'Efficiency_GFLOPS_W': row[9]
+                    })
+                elif num_cols >= 11:
+                    # Newest format (11 cols): Start_Time_UTC, GPU_Model, Backend, Size...
+                    parsed_data.append({
+                        'Start_Time_UTC': row[0],
+                        'GPU_Model': row[1],
+                        'Backend': row[2], 'Size': row[3], 'Iterations': row[4], 'Dtype': row[5],
+                        'Latency_ms': row[6], 'TFLOPS': row[7], 'Avg_Power_W': row[8], 
+                        'Peak_Power_W': row[9], 'Efficiency_GFLOPS_W': row[10]
+                    })
+        
+        if not parsed_data:
+            print("❌ Error: No valid data found in the CSV file.")
+            return
+            
+        # Convert the cleanly parsed list directly into a Pandas DataFrame
+        df = pd.DataFrame(parsed_data)
+
     except Exception as e:
-        print(f"❌ Error: Failed to read the CSV file. ({e})")
+        print(f"❌ Error: Failed to parse the CSV file. ({e})")
         return
-
-    required_cols = ['Backend', 'Size', 'Dtype', 'Latency_ms', 'TFLOPS']
-    missing_cols = [col for col in required_cols if col not in df.columns]
-    if missing_cols:
-        print(f"❌ Error: The CSV is missing required columns: {missing_cols}")
-        return
-
-    # Optional columns - Inject defaults if missing (Backward compatibility)
-    optional_cols = ['GPU_Model', 'Avg_Power_W', 'Peak_Power_W', 'Efficiency_GFLOPS_W']
-    for col in optional_cols:
-        if col not in df.columns:
-            df[col] = "Unknown GPU" if col == 'GPU_Model' else 0.0
-
-    numeric_cols = ['Latency_ms', 'TFLOPS', 'Avg_Power_W', 'Peak_Power_W', 'Efficiency_GFLOPS_W']
-    for col in numeric_cols:
-        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-
-    df['Size'] = df['Size'].astype(str)
 
     # ==========================================
-    # 2. APPLY FILTERS
+    # APPLY FILTERS
     # ==========================================
     if filter_backend:
         df = df[df['Backend'].str.lower() == filter_backend.lower()]
