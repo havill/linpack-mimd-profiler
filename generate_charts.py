@@ -4,7 +4,7 @@ import seaborn as sns
 import os
 import argparse
 
-def generate_charts(csv_file="benchmark_results.csv", filter_backend=None, filter_dtype=None, interactive=False, export_formats=["png"]):
+def generate_charts(csv_file="benchmark_results.csv", filter_backend=None, filter_dtype=None, filter_gpu=None, interactive=False, export_formats=["png"]):
     # Supported formats for matplotlib/seaborn
     supported_formats = {"eps", "jpeg", "jpg", "pdf", "pgf", "png", "ps", "raw", "rgba", "svg", "svgz", "tif", "tiff", "webp"}
     filtered_formats = [fmt.lower() for fmt in export_formats if fmt.lower() in supported_formats]
@@ -39,10 +39,11 @@ def generate_charts(csv_file="benchmark_results.csv", filter_backend=None, filte
         print(f"❌ Error: The CSV is missing required columns: {missing_cols}")
         return
 
-    optional_cols = ['Avg_Power_W', 'Peak_Power_W', 'Efficiency_GFLOPS_W']
+    # Optional columns - Inject defaults if missing (Backward compatibility)
+    optional_cols = ['GPU_Model', 'Avg_Power_W', 'Peak_Power_W', 'Efficiency_GFLOPS_W']
     for col in optional_cols:
         if col not in df.columns:
-            df[col] = 0.0
+            df[col] = "Unknown GPU" if col == 'GPU_Model' else 0.0
 
     numeric_cols = ['Latency_ms', 'TFLOPS', 'Avg_Power_W', 'Peak_Power_W', 'Efficiency_GFLOPS_W']
     for col in numeric_cols:
@@ -50,10 +51,15 @@ def generate_charts(csv_file="benchmark_results.csv", filter_backend=None, filte
 
     df['Size'] = df['Size'].astype(str)
 
+    # ==========================================
+    # 2. APPLY FILTERS
+    # ==========================================
     if filter_backend:
         df = df[df['Backend'].str.lower() == filter_backend.lower()]
     if filter_dtype:
         df = df[df['Dtype'].str.lower() == filter_dtype.lower()]
+    if filter_gpu:
+        df = df[df['GPU_Model'].str.contains(filter_gpu, case=False, na=False)]
 
     if df.empty:
         print("❌ Error: No data left to plot after applying filters.")
@@ -61,27 +67,29 @@ def generate_charts(csv_file="benchmark_results.csv", filter_backend=None, filte
 
     sns.set_theme(style="whitegrid")
 
+    # Determine title suffix based on GPU filtering
+    unique_gpus = df['GPU_Model'].nunique()
+    title_suffix = f" ({df['GPU_Model'].iloc[0]})" if unique_gpus == 1 and df['GPU_Model'].iloc[0] != "Unknown GPU" else ""
+
     # ==========================================
     # CHART 1: Performance Scaling (With Raw Data Dots)
     # ==========================================
     print("📈 Generating Performance Scaling Chart...")
     plt.figure(figsize=(12, 6))
     
-    # Draw the averaged bars (slightly transparent so we can see the dots)
     chart1 = sns.catplot(
         data=df, kind="bar",
         x="Size", y="TFLOPS", hue="Backend", col="Dtype",
         height=5, aspect=1.0, palette="viridis", sharey=False, alpha=0.6, capsize=.1
     )
     
-    # OVERLAY: Draw every single CSV row as a dot on top of the bars!
     chart1.map_dataframe(
         sns.stripplot, x="Size", y="TFLOPS", hue="Backend",
         dodge=True, palette="dark:black", alpha=0.7, size=4, jitter=True
     )
 
     chart1.set_axis_labels("Matrix Size (N)", "Performance (TFLOPS)")
-    chart1.fig.suptitle("GPU Compute Performance (Bars=Avg, Dots=Individual Runs)", y=1.05)
+    chart1.fig.suptitle(f"GPU Compute Performance{title_suffix}", y=1.05)
                 
     for fmt in export_formats:
         out_file = os.path.join(out_dir, f"chart_performance_tflops.{fmt}")
@@ -97,19 +105,17 @@ def generate_charts(csv_file="benchmark_results.csv", filter_backend=None, filte
     if not eff_df.empty:
         plt.figure(figsize=(10, 6))
         
-        # Averaged bars
         sns.barplot(
             data=eff_df, x="Size", y="Efficiency_GFLOPS_W", hue="Backend", 
             palette="magma", alpha=0.6, capsize=.1
         )
         
-        # OVERLAY: Individual data points
         sns.stripplot(
             data=eff_df, x="Size", y="Efficiency_GFLOPS_W", hue="Backend",
             dodge=True, color="black", alpha=0.7, size=4, jitter=True, legend=False
         )
         
-        plt.title("Hardware Energy Efficiency Scaling (Bars=Avg, Dots=Individual Runs)", fontsize=14)
+        plt.title(f"Hardware Energy Efficiency Scaling{title_suffix}", fontsize=14)
         plt.ylabel("Efficiency (GFLOPS / Watt)", fontsize=12)
         plt.xlabel("Matrix Size (N)", fontsize=12)
         plt.tight_layout()
@@ -128,13 +134,12 @@ def generate_charts(csv_file="benchmark_results.csv", filter_backend=None, filte
     print("⏱️ Generating Latency Chart...")
     plt.figure(figsize=(10, 6))
     
-    # Line plot automatically shows variance bounds if multiple runs exist
     sns.lineplot(
         data=df, x="Size", y="Latency_ms", hue="Backend", style="Dtype", 
         markers=True, dashes=False, palette="Set1", linewidth=2.5, markersize=8, errorbar='sd'
     )
     
-    plt.title("Compute Latency Scaling (Log Scale with Standard Deviation)", fontsize=14)
+    plt.title(f"Compute Latency Scaling (Log Scale){title_suffix}", fontsize=14)
     plt.ylabel("Latency (ms) - Log Scale", fontsize=12)
     plt.xlabel("Matrix Size (N)", fontsize=12)
     plt.yscale('log')
@@ -164,14 +169,13 @@ def generate_charts(csv_file="benchmark_results.csv", filter_backend=None, filte
             height=4, aspect=1.2, palette="coolwarm", alpha=0.8
         )
         
-        # Overlay data dots here too!
         chart4.map_dataframe(
             sns.stripplot, x="Size", y="Watts", hue="Power_Type",
             dodge=True, palette="dark:black", alpha=0.5, size=3, jitter=True
         )
 
         chart4.set_axis_labels("Matrix Size (N)", "Power Consumption (Watts)")
-        chart4.fig.suptitle("Average vs Peak Power Consumption", y=1.05)
+        chart4.fig.suptitle(f"Average vs Peak Power Consumption{title_suffix}", y=1.05)
         
         for fmt in export_formats:
             out_file = os.path.join(out_dir, f"chart_power_profile.{fmt}")
@@ -191,11 +195,11 @@ def generate_charts(csv_file="benchmark_results.csv", filter_backend=None, filte
             
             df['Plot_Power'] = df['Avg_Power_W'].apply(lambda x: x if x > 0 else 1)
             
-            # The interactive chart natively shows EVERY row! 
+            # Added GPU_Model to hover_data!
             fig = px.scatter(
                 df, x="Size", y="TFLOPS", color="Backend", symbol="Dtype",
-                size="Plot_Power", hover_data=["Start_Time_UTC", "Latency_ms", "Efficiency_GFLOPS_W", "Peak_Power_W"],
-                title="Interactive Performance Overview (Hover to see specific run data!)",
+                size="Plot_Power", hover_data=["GPU_Model", "Start_Time_UTC", "Latency_ms", "Efficiency_GFLOPS_W", "Peak_Power_W"],
+                title="Interactive Performance Overview (Hover for details)",
                 labels={"Size": "Matrix Size (N)", "TFLOPS": "Performance (TFLOPS)"},
                 size_max=30
             )
@@ -212,6 +216,7 @@ if __name__ == "__main__":
     parser.add_argument("-f", "--file", type=str, default="benchmark_results.csv")
     parser.add_argument("-b", "--backend", type=str, default=None)
     parser.add_argument("-d", "--dtype", type=str, default=None)
+    parser.add_argument("-g", "--gpu", type=str, default=None, help="Filter to a specific GPU Model substring")
     parser.add_argument("-i", "--interactive", action="store_true")
     parser.add_argument("-x", "--export-formats", type=str, default="png")
     
@@ -219,6 +224,6 @@ if __name__ == "__main__":
     export_formats = [fmt.strip() for fmt in args.export_formats.split(",") if fmt.strip()]
     
     generate_charts(
-        csv_file=args.file, filter_backend=args.backend, filter_dtype=args.dtype,
-        interactive=args.interactive, export_formats=export_formats
+        csv_file=args.file, filter_backend=args.backend, filter_dtype=args.dtype, 
+        filter_gpu=args.gpu, interactive=args.interactive, export_formats=export_formats
     )
