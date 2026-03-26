@@ -81,8 +81,15 @@ def run_cuda(n, iterations, dtype):
     memory_mb = ((n * n) + 2 * n) * bytes_per_element / (1024 ** 2)
 
     try:
-        device_name = f"CUDA GPU (Device {cp.cuda.Device(0).id})"
-    except:
+        # Query the CUDA runtime for the exact hardware name
+        props = cp.cuda.runtime.getDeviceProperties(0)
+        device_name = props['name']
+        
+        # Depending on the CuPy version, it might return bytes instead of a string
+        if isinstance(device_name, bytes):
+            device_name = device_name.decode('utf-8')
+    except Exception as e:
+        print(f"DEBUG: Could not get exact CUDA device name: {e}")
         device_name = "CUDA GPU"
 
     print("Generating matrix data on CPU and transferring to GPU...")
