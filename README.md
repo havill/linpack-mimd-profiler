@@ -168,7 +168,7 @@ python generate_charts.py -f benchmark_results.csv -b cuda -i -x png,pdf
 | `--backend` | `-b` | `None` | 特定のバックエンド（`cuda` または `opencl`）のデータのみにフィルタリングして描画します。 |
 | `--dtype` | `-d` | `None` | 特定のデータ型（`float32` または `float64`）のデータのみにフィルタリングして描画します。 |
 | `--interactive` | `-i` | `False` | Plotlyを使用した対話型のHTMLグラフ（Bubble Chart）を生成します。 |
-| `--export-formats` | `-x` | `png` | 出力する画像フォーマットをカンマ区切りで指定します（例: `png,pdf,svg`）。 |
+| `--export-formats` | `-x` | `png` | 出力する画像フォーマットをカンマ区切りで指定します（例: `eps`, `jpeg`, `pdf`, `pgf`, `png`, `ps`, `raw`, `rgba`, `svg`, `svgz`, `tiff`, `webp`）。 |
 
 ## 🛠️ トラブルシューティング
 
