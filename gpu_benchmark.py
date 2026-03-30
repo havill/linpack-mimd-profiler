@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+from html import parser
 import time
 import csv
 import os
@@ -392,7 +393,7 @@ def process_results(n, memory_mb, times, flops_per_run, device_name, avg_power=0
 
 def main():
     parser = argparse.ArgumentParser(description="Unified GPU Benchmark (CUDA & OpenCL)")
-    parser.add_argument("-b", "--backend", choices=["cuda", "opencl"], required=True, 
+    parser.add_argument("-b", "--backend", choices=["cuda", "opencl", "hpl-ai"], required=True, 
                         help="Choose the compute backend to run.")
     parser.add_argument("-n", "--size", type=int, default=8192, 
                         help="Matrix size N. Default: 8192")
@@ -402,6 +403,8 @@ def main():
                         help="Data precision. Default: float32")
     parser.add_argument("-o", "--output", type=str, default=None,
                         help="Path to CSV file to append results.")
+    parser.add_argument("-b", "--backend", choices=["cuda", "opencl", "hpl-ai"], required=True, 
+                        help="Choose the compute backend to run.")
     
     args = parser.parse_args()
 
