@@ -147,6 +147,99 @@ def run_cuda(n, iterations, dtype):
     )
 
 # ==============================================================================
+# HPL-AI BACKEND (Mixed Precision / Iterative Refinement)
+# ==============================================================================
+def run_hpl_ai(n, iterations, dtype):
+    try:
+        import cupy as cp
+        from cupyx.scipy.linalg import lu_factor, lu_solve
+    except ImportError:
+        print("ERROR: CuPy is not installed. Run: pip install cupy-cuda12x (or match your CUDA version)")
+        exit(1)
+
+    # For HPL-AI, we force the "high precision" to FP32 and the "low precision" to FP16
+    # (If the user asks for FP64, we can respect that for the high precision layer)
+    high_dt = cp.float64 if dtype == 'float64' else cp.float32
+    low_dt = cp.float16
+    
+    bytes_per_element = 8 if dtype == 'float64' else 4
+    # Memory estimation includes the high-precision matrix, low-precision matrix, and vectors
+    memory_mb = ((n * n * bytes_per_element) + (n * n * 2)) / (1024 ** 2)
+
+    try:
+        props = cp.cuda.runtime.getDeviceProperties(0)
+        device_name = props['name']
+        if isinstance(device_name, bytes):
+            device_name = device_name.decode('utf-8')
+    except Exception:
+        device_name = "CUDA GPU"
+
+    print("Generating HPL-AI matrices and warming up Tensor Cores...")
+    try:
+        A_high = cp.random.rand(n, n, dtype=high_dt)
+        b_high = cp.random.rand(n, dtype=high_dt)
+        x_init = cp.zeros_like(b_high)
+    except cp.cuda.memory.OutOfMemoryError:
+        print("ERROR: Out of GPU Memory. Try a smaller matrix size (-n).")
+        exit(1)
+
+    # FLOPS for standard LU decomposition + solve: (2/3)*N^3 + 2*N^2
+    # We use the standard formula to compare apples-to-apples with standard FP32
+    flops_per_run = (2.0 / 3.0) * (n ** 3) + 2.0 * (n ** 2)
+    times = []
+
+    # Warmup
+    A_low = A_high.astype(low_dt)
+    lu_and_piv = lu_factor(A_low)
+    cp.cuda.Stream.null.synchronize()
+
+    monitor = PowerMonitor()
+    monitor.start()
+
+    print(f"Running HPL-AI iterations (High: {dtype}, Low: FP16)...")
+    for _ in range(iterations):
+        # Reset our guess
+        x = x_init.copy()
+        
+        # Slightly alter 'b' to prevent aggressive caching
+        b_high = cp.random.rand(n, dtype=high_dt)
+        cp.cuda.Stream.null.synchronize()
+
+        start_time = time.perf_counter()
+        
+        # Tensor Core Phase: LU factorization in low precision
+        A_low = A_high.astype(low_dt)
+        lu_and_piv = lu_factor(A_low)
+        
+        # Iterative Refinement Phase
+        tolerance = 1e-8 if dtype == 'float32' else 1e-12
+        for i in range(50): # Max 50 iterations
+            residual = b_high - cp.dot(A_high, x)
+            if cp.linalg.norm(residual) < tolerance:
+                break
+            
+            correction = lu_solve(lu_and_piv, residual.astype(low_dt))
+            x = x + correction.astype(high_dt)
+            
+        cp.cuda.Stream.null.synchronize()
+        end_time = time.perf_counter()
+        
+        times.append(end_time - start_time)
+
+    avg_power, peak_power = monitor.stop()
+    print(f"Average Power: {avg_power:.2f} W, Peak Power: {peak_power:.2f} W")
+
+    return process_results(
+        n=n,
+        memory_mb=memory_mb,
+        times=times,
+        flops_per_run=flops_per_run,
+        device_name=device_name,
+        avg_power=avg_power,
+        peak_power=peak_power
+    )
+
+# ==============================================================================
 # OPENCL BACKEND
 # ==============================================================================
 def run_opencl(n, iterations, dtype):
