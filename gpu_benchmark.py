@@ -155,17 +155,19 @@ def run_hpl_ai(n, iterations, dtype):
         import cupy as cp
         from cupyx.scipy.linalg import lu_factor, lu_solve
     except ImportError:
-        print("ERROR: CuPy is not installed. Run: pip install cupy-cuda12x (or match your CUDA version)")
+        print("ERROR: CuPy is not installed.")
         exit(1)
 
-    # For HPL-AI, we force the "high precision" to FP32 and the "low precision" to FP16
-    # (If the user asks for FP64, we can respect that for the high precision layer)
-    high_dt = cp.float64 if dtype == 'float64' else cp.float32
-    low_dt = cp.float16
+    # 1. Shift the precision window to bypass CuPy's FP16 limitations
+    print("⚠️  Note: CuPy LU factorization does not natively support FP16.")
+    print("   Simulating HPL-AI using FP32 (Low Precision) and FP64 (High Precision).")
     
-    bytes_per_element = 8 if dtype == 'float64' else 4
-    # Memory estimation includes the high-precision matrix, low-precision matrix, and vectors
-    memory_mb = ((n * n * bytes_per_element) + (n * n * 2)) / (1024 ** 2)
+    high_dt = cp.float64
+    low_dt = cp.float32
+    
+    # Calculate memory requirements for both the high and low precision matrices
+    bytes_per_element = 8 # FP64
+    memory_mb = ((n * n * bytes_per_element) + (n * n * 4)) / (1024 ** 2)
 
     try:
         props = cp.cuda.runtime.getDeviceProperties(0)
@@ -175,7 +177,7 @@ def run_hpl_ai(n, iterations, dtype):
     except Exception:
         device_name = "CUDA GPU"
 
-    print("Generating HPL-AI matrices and warming up Tensor Cores...")
+    print("Generating HPL-AI matrices in FP64...")
     try:
         A_high = cp.random.rand(n, n, dtype=high_dt)
         b_high = cp.random.rand(n, dtype=high_dt)
@@ -184,8 +186,7 @@ def run_hpl_ai(n, iterations, dtype):
         print("ERROR: Out of GPU Memory. Try a smaller matrix size (-n).")
         exit(1)
 
-    # FLOPS for standard LU decomposition + solve: (2/3)*N^3 + 2*N^2
-    # We use the standard formula to compare apples-to-apples with standard FP32
+    # FLOPS calculation (based on the standard dense LU solve)
     flops_per_run = (2.0 / 3.0) * (n ** 3) + 2.0 * (n ** 2)
     times = []
 
@@ -197,28 +198,32 @@ def run_hpl_ai(n, iterations, dtype):
     monitor = PowerMonitor()
     monitor.start()
 
-    print(f"Running HPL-AI iterations (High: {dtype}, Low: FP16)...")
+    print("Running HPL-AI Iterative Refinement loop...")
     for _ in range(iterations):
         # Reset our guess
         x = x_init.copy()
         
-        # Slightly alter 'b' to prevent aggressive caching
+        # Alter 'b' slightly to prevent cache cheating
         b_high = cp.random.rand(n, dtype=high_dt)
         cp.cuda.Stream.null.synchronize()
 
         start_time = time.perf_counter()
         
-        # Tensor Core Phase: LU factorization in low precision
+        # Heavy Lift in FP32
         A_low = A_high.astype(low_dt)
         lu_and_piv = lu_factor(A_low)
         
-        # Iterative Refinement Phase
-        tolerance = 1e-8 if dtype == 'float32' else 1e-12
-        for i in range(50): # Max 50 iterations
+        # Iterative Refinement in FP64
+        tolerance = 1e-12 
+        for i in range(50):
+            # Calculate residual error in high precision
             residual = b_high - cp.dot(A_high, x)
+            
+            # Check for convergence
             if cp.linalg.norm(residual) < tolerance:
                 break
             
+            # Solve for correction in low precision, apply in high precision
             correction = lu_solve(lu_and_piv, residual.astype(low_dt))
             x = x + correction.astype(high_dt)
             
@@ -230,6 +235,7 @@ def run_hpl_ai(n, iterations, dtype):
     avg_power, peak_power = monitor.stop()
     print(f"Average Power: {avg_power:.2f} W, Peak Power: {peak_power:.2f} W")
 
+    # Hardcode the dtype output to "Mixed (FP32/FP64)" so it's clear in the CSV
     return process_results(
         n=n,
         memory_mb=memory_mb,
