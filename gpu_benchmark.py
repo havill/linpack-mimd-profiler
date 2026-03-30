@@ -403,8 +403,6 @@ def main():
                         help="Data precision. Default: float32")
     parser.add_argument("-o", "--output", type=str, default=None,
                         help="Path to CSV file to append results.")
-    parser.add_argument("-b", "--backend", choices=["cuda", "opencl", "hpl-ai"], required=True, 
-                        help="Choose the compute backend to run.")
     
     args = parser.parse_args()
 
