@@ -424,6 +424,8 @@ def main():
     # Route to appropriate backend
     if args.backend == "cuda":
         res = run_cuda(args.size, args.iterations, args.dtype)
+    elif args.backend == "hpl-ai":
+        res = run_hpl_ai(args.size, args.iterations, args.dtype)
     else:
         res = run_opencl(args.size, args.iterations, args.dtype)
 
