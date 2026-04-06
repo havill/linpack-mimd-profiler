@@ -192,7 +192,7 @@ def run_hpl_ai(n, iterations, dtype):
 
     # Warmup
     A_low = A_high.astype(low_dt)
-    lu_and_piv = lu_factor(A_low)
+    lu_and_piv = lu_factor(A_low)   # no real equiv to cuSOLVER in OpenCL
     cp.cuda.Stream.null.synchronize()
 
     monitor = PowerMonitor()
@@ -211,7 +211,7 @@ def run_hpl_ai(n, iterations, dtype):
         
         # Heavy Lift in FP32
         A_low = A_high.astype(low_dt)
-        lu_and_piv = lu_factor(A_low)
+        lu_and_piv = lu_factor(A_low)   # PyOpenCL doesn't have a built-in math lib
         
         # Iterative Refinement in FP64
         tolerance = 1e-12 
