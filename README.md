@@ -62,7 +62,7 @@ source bench_env/bin/activate
 
 # 依存関係のインストール (仮想環境内)
 pip install numpy pyopencl cupy-cuda13x pandas matplotlib seaborn plotly pynvml
-‘‘‘
+```
 
 #### 🎩 Fedora Remix for WSL (Whitewater Foundry) の場合
 
